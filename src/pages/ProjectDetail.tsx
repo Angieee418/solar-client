@@ -7,6 +7,7 @@ import AntdIcon from '../components/AntdIcon'
 import { ProjectContext } from '../context/ProjectContext'
 import type { ProjectModel } from '../models/project'
 import type { DeviceModel } from '../models/device'
+import { formatTimestamp } from '../utils/datetime'
 import '../styles/index.css'
 
 const { Option } = Select
@@ -120,10 +121,7 @@ export default function ProjectDetail() {
   }
 
   function formatDate(ts: string | number | undefined | null): string {
-    if (!ts) return '-'
-    const d = new Date(ts)
-    if (isNaN(d.getTime())) return String(ts)
-    return d.toLocaleString()
+    return formatTimestamp(ts)
   }
 
   function healthTag(h: string | undefined) {

@@ -5,6 +5,7 @@ import ReactECharts from 'echarts-for-react'
 import { getDeviceData, getDeviceInfo, ingestTelemetry } from '../api'
 import { ProjectContext } from '../context/ProjectContext'
 import type { DeviceMeta, TelemetryPoint, IngestPayload } from '../models/device'
+import { formatTimeLabel, formatTimestamp, getTelemetryPointTime, parseTimestamp } from '../utils/datetime'
 import '../styles/index.css'
 
 export default function DeviceDetail() {
@@ -26,9 +27,9 @@ export default function DeviceDetail() {
     setLoading(true)
     setError(null)
     try {
-      // Fetch last 24 hours of data (includes device info + telemetry)
+      // Fetch last 1 hour of data (includes device info + telemetry)
       const to = Date.now()
-      const from = to - 60 * 60 * 1000 * 24
+      const from = to - 60 * 60 * 1000
       const mydata = await getDeviceData(id, new Date(from).toISOString(), new Date(to).toISOString())
 
       const data = (mydata as any)?.data || {}
@@ -48,8 +49,8 @@ export default function DeviceDetail() {
       const rawList = telemetriesRaw.map(flattenPoint)
 
       points.sort((a: any, b: any) => {
-        const ta = new Date(a.timestamp || a.time || a.ts || '0').getTime()
-        const tb = new Date(b.timestamp || b.time || b.ts || '0').getTime()
+        const ta = getTelemetryPointTime(a)
+        const tb = getTelemetryPointTime(b)
         return ta - tb
       })
 
@@ -73,10 +74,7 @@ export default function DeviceDetail() {
   }
 
   function formatDate(val: string | number | null | undefined): string {
-    if (!val) return '-'
-    const d = new Date(val)
-    if (isNaN(d.getTime())) return String(val)
-    return d.toLocaleString()
+    return formatTimestamp(val)
   }
 
   function healthTag(h: string | undefined) {
@@ -138,7 +136,7 @@ export default function DeviceDetail() {
     }
 
     const seriesData = points.map(p => {
-      const t = new Date(p.timestamp || p.time || p.ts || p.createdAt || p._ts || Date.now()).getTime()
+      const t = getTelemetryPointTime(p as Record<string, unknown>)
       let v: unknown = null
       if (hasForced) v = getNested(p as Record<string, any>, forcedPath)
       else v = (p as Record<string, any>)[key!]
@@ -185,34 +183,26 @@ export default function DeviceDetail() {
 
   const chartOption = buildChartOption(telemetry)
 
-  const now = Date.now()
-  const nowHourFloor = new Date(now)
-  nowHourFloor.setMinutes(0, 0, 0)
-  const maxTime = nowHourFloor.getTime() + 3 * 60 * 60 * 1000
-  const minTime = maxTime - 24 * 60 * 60 * 1000
   const themedChartOption = {
     ...chartOption,
     title: { ...chartOption.title, textStyle: { color: '#4f5a70', fontSize: 14, fontWeight: 600 } },
     tooltip: { ...chartOption.tooltip, trigger: 'axis' as const, formatter: (params: any) => {
       const list = Array.isArray(params) ? params : [params]
       if (!list.length) return ''
-      const t = new Date(list[0].value[0])
-      const time = `${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')} ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`
+      const time = formatTimestamp(list[0].value[0], '')
       return list.map((p: any) => `${time}<br/>${p.marker} ${p.seriesName}: ${p.value[1]}`).join('<br/>')
     }},
     xAxis: {
-      type: 'value' as const,
+      ...(chartOption.xAxis || {}),
+      type: 'time' as const,
       name: 'Time',
-      min: minTime,
-      max: maxTime,
-      interval: 3 * 60 * 60 * 1000,
+      min: Date.now() - 60 * 60 * 1000,
+      max: Date.now(),
+      interval: 10 * 60 * 1000,
       axisLine: { lineStyle: { color: '#c4b5fd' } },
       axisLabel: {
         color: '#7c6dab',
-        formatter: (val: number) => {
-          const d = new Date(val)
-          return `${String(d.getHours()).padStart(2, '0')}:00`
-        },
+        formatter: (val: number) => formatTimeLabel(val),
       },
     },
     yAxis: { ...chartOption.yAxis, axisLine: { lineStyle: { color: '#c4b5fd' } }, splitLine: { lineStyle: { color: '#ede9fe' } }, axisLabel: { color: '#7c6dab' } },
@@ -333,7 +323,7 @@ export default function DeviceDetail() {
                 className={`dd-tabs__btn ${activeTab === 'trend' ? 'dd-tabs__btn--active' : ''}`}
                 onClick={() => setActiveTab('trend')}
               >
-                Trend <span className="dd-tabs__btn-sub">(last 24h)</span>
+                Trend <span className="dd-tabs__btn-sub">(last 1h)</span>
               </button>
               <button
                 className={`dd-tabs__btn ${activeTab === 'raw' ? 'dd-tabs__btn--active' : ''}`}
@@ -354,7 +344,14 @@ export default function DeviceDetail() {
               </div>
             ) : (
               <div className="dd-raw-card">
-                <pre className="dd-raw-pre">{JSON.stringify((rawTelemetry || []).slice().reverse().slice(0, 20), null, 2)}</pre>
+                <pre className="dd-raw-pre">{JSON.stringify((rawTelemetry || []).slice().reverse().slice(0, 20).map(p => {
+                  const tsFields = ['timestamp', 'time', 'ts', 'createdAt', '_ts'] as const
+                  const converted = { ...p } as Record<string, unknown>
+                  for (const key of tsFields) {
+                    if (converted[key]) converted[key] = formatTimestamp(converted[key] as string | number)
+                  }
+                  return converted
+                }), null, 2)}</pre>
               </div>
             )}
 
