@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
-import { Alert, Empty, Spin, message, Popconfirm } from 'antd'
+import { Alert, Empty, Spin, message, Popconfirm, Tooltip } from 'antd'
 import { DeleteOutlined } from '@ant-design/icons'
 import { useNavigate, Link } from 'react-router-dom'
 import { getProjects, createProject, deleteProject } from '../api'
@@ -108,11 +108,19 @@ function getDeviceCount(project: ProjectModel, type: string): number {
     || 0
 }
 
+const variantLabelMap: Record<string, string> = {
+  offline: 'Offline',
+  warning: 'Warning',
+  ok: 'Online',
+}
+
 function StatusBadge({ variant, count }: { variant: string; count: number }) {
   return (
-    <span className={`project-status-badge project-status-badge--${variant}`}>
-      {count}
-    </span>
+    <Tooltip title={variantLabelMap[variant] ?? variant}>
+      <span className={`project-status-badge project-status-badge--${variant}`}>
+        {count}
+      </span>
+    </Tooltip>
   )
 }
 
